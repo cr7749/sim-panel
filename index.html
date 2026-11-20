@@ -38,6 +38,10 @@ font-variant-numeric:tabular-nums}
 .cw{position:relative;width:100%}
 .grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
 .mcard{border-top:4px solid var(--c)}
+.best{display:inline-block;font-size:13px;font-weight:600;background:var(--chip);color:var(--ink);
+border-radius:999px;padding:2px 11px;margin-left:8px;vertical-align:middle}
+.best:empty{display:none}
+.crown{font-size:12px;font-weight:600;color:var(--ink2);margin-left:6px}
 .mname{font-weight:650;font-size:15px}.mret{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
 .msub{font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:4px 0 10px}
@@ -67,7 +71,7 @@ th:first-child,td:first-child{text-align:left}th{color:var(--ink2);font-weight:6
   <div class="card"><div class="cw" style="height:230px"><canvas id="heroChart"></canvas></div></div>
 </div>
 
-<h2>各模型即時損益</h2>
+<h2>各模型即時損益 <span id="bestBadge" class="best"></span></h2>
 <div class="hint">影子帳本（主要評估依據）：理論成交 = 真實中價 ± 滑價 + 吃單手續費</div>
 <div class="seg" id="scaleSeg"></div>
 <div class="grid4" id="modelCards"></div>
@@ -185,12 +189,23 @@ function renderSeg(){
 
 function retSeries(b){ const s = startOf(b); return withLive(b).map(([d,v]) => [d, (v/s-1)*100]); }
 
+function liveReturn(b){ return b ? (navLive(b) ?? lastNav(b)) / startOf(b) - 1 : null; }
+function bestModel(){
+  // best = highest live cumulative return in the selected scale; none while all are equal
+  const r = MODELS.map(m => [m, liveReturn(book(m, SCALE))]).filter(x => x[1] != null);
+  if (r.length < 2) return null;
+  r.sort((a,b) => b[1]-a[1]);
+  return r[0][1] > r[r.length-1][1] + 1e-12 ? r[0] : null;
+}
 function renderModels(){
   const wrap = document.getElementById('modelCards');
+  const best = bestModel(), scaleLabel = SCALES.find(x=>x[0]===SCALE)[1];
+  document.getElementById('bestBadge').innerHTML = best ?
+    `🏆 目前最佳：<span style="color:${css('--m'+best[0])}">●</span> ${NAMES[best[0]]} <span class="${sgn(best[1])}">${pct(best[1])}</span>（${scaleLabel} 帳本）` : '';
   wrap.innerHTML = MODELS.map(m => { const b = book(m, SCALE), c = css('--m'+m);
     if (!b) return `<div class="card mcard" style="--c:${c}"><div class="mname">${NAMES[m]}</div><div class="msub">尚無資料</div></div>`;
     const s = startOf(b), last = lastNav(b), now = navLive(b) ?? last;
-    return `<div class="card mcard" style="--c:${c}"><div class="mname">${NAMES[m]}${m===D.live_version?' · 實際下單':''}</div>` +
+    return `<div class="card mcard" style="--c:${c}"><div class="mname">${NAMES[m]}${m===D.live_version?' · 實際下單':''}${best&&best[0]===m?'<span class="crown">🏆 最佳</span>':''}</div>` +
       `<div class="mret ${sgn(now-s)}">${pct(now/s-1)}</div>` +
       `<div class="msub">自上次執行 <span class="${sgn(now-last)}">${pct(now/last-1)}</span> · 回撤 ${pct(maxDD(withLive(b).map(x=>x[1])),1)}</div>` +
       `<div class="cw" style="height:70px;margin-top:6px"><canvas id="spark${m}"></canvas></div></div>`; }).join('');
